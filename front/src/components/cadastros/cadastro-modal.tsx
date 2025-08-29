@@ -1,9 +1,12 @@
 import { Modal } from "../layouts/modal";
 import type { FormKind } from "./cadastro-actions";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { api } from "../../lib/api";
+import { toast } from "react-toastify";
+import 'react-toastify/dist/ReactToastify.css';
 
 type Props = {
   open: boolean;
@@ -11,6 +14,7 @@ type Props = {
   formKind: FormKind;
   defaultValues?: any;
   onSubmit?: (data: any) => Promise<void> | void;
+  onSuccess?: () => Promise<void> | void;
 };
 
 export function CadastroModal({
@@ -21,6 +25,14 @@ export function CadastroModal({
   onSubmit: onSubmitProp,
 }: Props) {
   const isEditing = Boolean(defaultValues);
+  console.log(
+    "isEditing:",
+    isEditing,
+    "formKind:",
+    formKind,
+    "defaultValues:",
+    defaultValues
+  );
   const title =
     formKind === "usuario"
       ? isEditing
@@ -40,6 +52,11 @@ export function CadastroModal({
     email: z.string().email("Email inválido"),
     funcao: z.enum(["administrador", "vendedor", "veterinario"]),
     senha: z.string().min(6, "Mínimo de 6 caracteres"),
+    observacoes: z
+      .string()
+      .max(500, "Máximo de 500 caracteres")
+      .optional()
+      .or(z.literal("")),
   });
 
   const clienteSchema = z.object({
@@ -64,6 +81,72 @@ export function CadastroModal({
     return zodResolver(empresaSchema) as unknown as Resolver<any>;
   }, [formKind]);
 
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Tem certeza que deseja excluir o usuário ${defaultValues.nome}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      console.log('Tentando excluir usuário ID:', defaultValues.id);
+      
+      // Primeiro verifica se o usuário existe
+      try {
+        await api.get(`/user/${defaultValues.id}`);
+      } catch (getError: any) {
+        console.error('Erro ao verificar usuário:', getError);
+        if (getError.response?.status === 404) {
+          toast.warning('Este usuário já foi removido.');
+          onClose();
+          return;
+        }
+        throw getError; // Re-throw para ser pego pelo catch externo
+      }
+      
+      // Se chegou aqui, o usuário existe, então tenta deletar
+      const response = await api.delete(`/user/${defaultValues.id}`);
+      console.log('Resposta da exclusão:', response);
+      
+      toast.success("Usuário excluído com sucesso!");
+      onClose();
+      
+      // Atualiza a lista
+      if (onSubmitProp) {
+        await onSubmitProp({} as any);
+      }
+    } catch (error: any) {
+      console.error("Erro ao excluir usuário:", error);
+      console.error('Detalhes do erro:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method
+        }
+      });
+      
+      if (error.response?.status === 404) {
+        toast.error("Usuário não encontrado. Pode ter sido excluído por outra pessoa.");
+      } else if (error.response?.status === 403) {
+        toast.error("Você não tem permissão para excluir este usuário.");
+      } else if (error.response?.status === 500) {
+        toast.error("Erro no servidor ao tentar excluir o usuário.");
+      } else if (!navigator.onLine) {
+        toast.error("Sem conexão com a internet. Verifique sua conexão e tente novamente.");
+      } else {
+        toast.error(`Erro ao excluir usuário: ${error.message || 'Tente novamente mais tarde.'}`);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const {
     register,
     handleSubmit,
@@ -83,12 +166,59 @@ export function CadastroModal({
   }, [open, defaultValues, formKind, reset]);
 
   const onSubmit = async (data: UsuarioForm | ClienteForm | EmpresaForm) => {
-    // Encaminha para o callback do pai se existir
-    if (onSubmitProp) {
-      await onSubmitProp(data);
-    } else {
+    try {
+      if (formKind === "usuario") {
+        const d = data as UsuarioForm;
+        const nivelAcesso = d.funcao === "administrador" ? "admin" : d.funcao;
+        const payload = {
+          nome: d.nome,
+          email: d.email,
+          senha: d.senha,
+          nivel_acesso: nivelAcesso,
+          ativo: true,
+          observacoes: d.observacoes || "",
+        };
+
+        if (isEditing && (defaultValues as any)?.id) {
+          // Edição total do usuário
+          const userId = String((defaultValues as any).id);
+          await api.put(`/user/${userId}`, payload);
+          toast.success("Usuário atualizado com sucesso!");
+          onClose();
+          // Chamar a função de sucesso para atualizar a lista
+          if (onSubmitProp) {
+            await onSubmitProp(data);
+          }
+        } else {
+          // Criação de novo usuário
+          await api.post("/user", payload);
+          toast.success("Usuário criado com sucesso!");
+          onClose();
+          // Chamar a função de sucesso para atualizar a lista
+          if (onSubmitProp) {
+            await onSubmitProp(data);
+          }
+        }
+      } else {
+        // Mantém comportamento padrão para outros formulários
+        // eslint-disable-next-line no-console
+        console.log("Cadastro submetido:", formKind, data);
+      }
+
+      // Após sucesso, notifica o pai se existir (ex.: atualizar listas locais)
+      if (onSubmitProp) {
+        await onSubmitProp(data);
+      }
+    } catch (err: any) {
+      // Tenta extrair mensagem do backend; fallback genérico
+      const msg =
+        err?.response?.data?.message || "Não foi possível criar o usuário.";
       // eslint-disable-next-line no-console
-      console.log("Cadastro submetido:", formKind, data);
+      console.error(err);
+      if (typeof window !== "undefined") {
+        window.alert(msg);
+      }
+      return; // não fechar/resetar em caso de erro
     }
     onClose();
     reset();
@@ -167,6 +297,20 @@ export function CadastroModal({
                   </span>
                 )}
               </div>
+              <div className="grid gap-2">
+                <label className="text-sm text-font/80">Observações</label>
+                <textarea
+                  {...register("observacoes")}
+                  rows={3}
+                  className="px-3 py-2 rounded-lg bg-input border border-input-border text-font placeholder:text-font/50 w-full resize-y"
+                  placeholder="Anotações adicionais sobre o usuário (opcional)"
+                />
+                {errors?.observacoes && (
+                  <span className="text-xs text-red-400">
+                    {String(errors.observacoes.message)}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
@@ -240,19 +384,72 @@ export function CadastroModal({
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-10 px-4 rounded-lg border border-input-border bg-input text-font hover:border-primary/60"
-          >
-            Cancelar
-          </button>
+          {isEditing && formKind === "usuario" && defaultValues?.id ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="h-10 px-4 rounded-lg border border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500/20 disabled:opacity-60 flex items-center gap-2"
+            >
+              {isDeleting ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                  Excluir
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-10 px-4 rounded-lg border border-input-border bg-input text-font hover:border-primary/60"
+            >
+              Cancelar
+            </button>
+          )}
           <button
             type="submit"
             disabled={isSubmitting}
             className="h-10 px-4 rounded-lg bg-primary text-contrast font-semibold hover:brightness-110 disabled:opacity-60"
           >
-            {isSubmitting ? "Enviando..." : "Continuar"}
+            {isSubmitting ? "Enviando..." : isEditing ? "Salvar" : "Continuar"}
           </button>
         </div>
       </form>

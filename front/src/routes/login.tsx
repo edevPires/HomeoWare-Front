@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import axios from "axios";
+import { api } from "../lib/api";
 
 export const Route = createFileRoute("/login")({
   component: RouteComponent,
@@ -33,56 +33,60 @@ function RouteComponent() {
   });
 
   const onSubmit: SubmitHandler<LoginFormValues> = async (data) => {
-    // Requisição de login
-    // Request: POST /api/login
-    // Body JSON esperado:
-    // {
-    //   "email": string,
-    //   "password": string
-    // }
-    // Resposta esperada (sucesso - 200):
-    // {
-    //   "success": true,
-    //   "token": string, // JWT ou similar
-    //   "user": {
-    //     "id": string | number,
-    //     "name": string,
-    //     "email": string,
-    //     "role": "administrador" | "vendedor" | "veterinario" | string
-    //   }
-    // }
-    // Resposta de erro (exemplos):
-    // 401/400
-    // {
-    //   "success": false,
-    //   "message": string
-    // }
+    // API: POST /login (Sanctum)
+    // Body esperado: { email: string, senha: string }
+    // Sucesso 200: { message, token, token_type, user }
     try {
-      const resp = await axios.post("/api/login", {
+      const resp = await api.post("/login", {
         email: data.email,
-        password: data.password,
+        senha: data.password,
       });
 
       const payload = resp.data as {
-        success: boolean;
-        token?: string;
-        user?: { id: string | number; name: string; email: string; role?: string };
         message?: string;
+        token?: string;
+        token_type?: string; // "Bearer"
+        user?: {
+          id: number | string;
+          nome?: string;
+          name?: string;
+          email: string;
+          nivel_acesso?: string;
+          ativo?: boolean;
+        };
       };
 
-      if (payload?.success && payload?.token) {
-        // Armazena o token (ajuste conforme política de segurança da app)
+      if (payload?.token) {
+        // Armazena token e usuário
         localStorage.setItem("auth_token", payload.token);
-        if (payload.user) {
-          localStorage.setItem("auth_user", JSON.stringify(payload.user));
-        }
-        // Redireciona para Estoque
+        if (payload?.token_type) localStorage.setItem("auth_token_type", payload.token_type);
+        if (payload?.user) localStorage.setItem("auth_user", JSON.stringify(payload.user));
+
+        // Redireciona
         navigate({ to: "/hub/estoque" });
       } else {
         const msg = payload?.message || "Falha ao autenticar. Verifique suas credenciais.";
         alert(msg);
       }
     } catch (err: any) {
+      // Trata 401 e 422
+      const status = err?.response?.status;
+      if (status === 401) {
+        const msg = err?.response?.data?.message || "Credenciais inválidas.";
+        alert(msg);
+        return;
+      }
+      if (status === 422) {
+        const errors = err?.response?.data?.errors;
+        const msg = err?.response?.data?.message || "Erro de validação nos dados enviados.";
+        if (errors) {
+          const details = Object.values(errors).flat().join("\n");
+          alert(`${msg}\n${details}`);
+        } else {
+          alert(msg);
+        }
+        return;
+      }
       const msg = err?.response?.data?.message || "Não foi possível realizar o login.";
       alert(msg);
     }

@@ -1,11 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LayoutTitle } from "../../components/layouts/layout-title";
 import { SearchIcon } from "lucide-react";
 import { CadastroActions } from "../../components/cadastros/cadastro-actions";
 import { CadastroModal } from "../../components/cadastros/cadastro-modal";
+import { api } from "../../lib/api";
 
 type TabKey = "usuarios" | "clientes" | "empresas";
+type UsuarioFuncao = "administrador" | "vendedor" | "veterinario";
+type UsuarioListItem = { id: string; nome: string; email: string; funcao: UsuarioFuncao };
+
+const mapNivelToFuncao = (nivel: unknown): UsuarioFuncao => {
+  if (nivel === "admin") return "administrador";
+  if (nivel === "vendedor") return "vendedor";
+  if (nivel === "veterinario") return "veterinario";
+  return "vendedor"; // default
+};
 
 export const Route = createFileRoute("/hub/cadastros")({
   component: RouteComponent,
@@ -21,12 +31,48 @@ function RouteComponent() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Estados (mock) editáveis para permitir criar/editar
-  const [usuarios, setUsuarios] = useState(
-    () => [
-      { id: "U-001", nome: "Maria Souza", email: "maria@example.com", funcao: "vendedor" as const },
-      { id: "U-002", nome: "João Silva", email: "joao@example.com", funcao: "administrador" as const },
-    ]
-  );
+  const [usuarios, setUsuarios] = useState<UsuarioListItem[]>([]);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [errorUsuarios, setErrorUsuarios] = useState<string | null>(null);
+  // eslint-disable-next-line no-console
+  console.log("[Cadastros] usuarios state:", usuarios.length, usuarios);
+
+  const loadUsuarios = async () => {
+    try {
+      setLoadingUsuarios(true);
+      setErrorUsuarios(null);
+      const resp = await api.get("/user", { withCredentials: true });
+      const payload = resp?.data;
+      const items: any[] = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.users)
+            ? payload.users
+            : [];
+      const mapped: UsuarioListItem[] = items.map((u) => ({
+        id: String(u.id ?? ""),
+        nome: String(u.nome ?? ""),
+        email: String(u.email ?? ""),
+        // backend: nivel_acesso: 'admin' | 'vendedor' | 'veterinario'
+        funcao: mapNivelToFuncao(u?.nivel_acesso),
+      }));
+      // eslint-disable-next-line no-console
+      console.log("Usuarios carregados:", mapped.length, mapped);
+      setUsuarios(mapped);
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error(e);
+      setErrorUsuarios(e?.response?.data?.message || "Falha ao carregar usuários");
+    } finally {
+      setLoadingUsuarios(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsuarios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [clientes, setClientes] = useState(
     () => [
       { id: "C-101", nome: "Clínica Vida", documento: "12.345.678/0001-00" },
@@ -100,7 +146,7 @@ function RouteComponent() {
     if (formKind === "usuario") {
       const u = usuarios.find((x) => x.id === editingId);
       if (!u) return undefined;
-      return { nome: u.nome, email: u.email, funcao: u.funcao ?? "vendedor", senha: "" };
+      return { id: u.id, nome: u.nome, email: u.email, funcao: u.funcao ?? "vendedor", senha: "" };
     }
     if (formKind === "cliente") {
       const c = clientes.find((x) => x.id === editingId);
@@ -112,31 +158,36 @@ function RouteComponent() {
     return { razaoSocial: e.nome, cnpj: e.documento };
   }, [editingId, formKind, usuarios, clientes, empresas]);
 
-  // Submissão (mock) cria/edita no estado local
-  const handleSubmit = async (payload: any) => {
-    if (formKind === "usuario") {
-      if (editingId) {
-        setUsuarios((prev) => prev.map((u) => (u.id === editingId ? { ...u, nome: payload.nome, email: payload.email, funcao: payload.funcao } : u)));
-      } else {
-        const id = `U-${String(Math.floor(Math.random() * 900) + 100)}`;
-        setUsuarios((prev) => [{ id, nome: payload.nome, email: payload.email, funcao: payload.funcao }, ...prev]);
-      }
-    } else if (formKind === "cliente") {
-      if (editingId) {
-        setClientes((prev) => prev.map((c) => (c.id === editingId ? { ...c, nome: payload.nome, documento: payload.documento } : c)));
-      } else {
-        const id = `C-${String(Math.floor(Math.random() * 900) + 100)}`;
-        setClientes((prev) => [{ id, nome: payload.nome, documento: payload.documento }, ...prev]);
-      }
+  // Atualiza a lista de clientes localmente (para uso offline/demo)
+  const updateClientes = (payload: any, editingId: string | null) => {
+    if (editingId) {
+      setClientes((prev) => 
+        prev.map((c) => 
+          c.id === editingId 
+            ? { ...c, nome: payload.nome, documento: payload.documento } 
+            : c
+        )
+      );
     } else {
-      if (editingId) {
-        setEmpresas((prev) => prev.map((e) => (e.id === editingId ? { ...e, nome: payload.razaoSocial, documento: payload.cnpj } : e)));
-      } else {
-        const id = `E-${String(Math.floor(Math.random() * 900) + 100)}`;
-        setEmpresas((prev) => [{ id, nome: payload.razaoSocial, documento: payload.cnpj }, ...prev]);
-      }
+      const id = `C-${String(Math.floor(Math.random() * 900) + 100)}`;
+      setClientes((prev) => [{ id, nome: payload.nome, documento: payload.documento }, ...prev]);
     }
-    setEditingId(null);
+  };
+
+  // Atualiza a lista de empresas localmente (para uso offline/demo)
+  const updateEmpresas = (payload: any, editingId: string | null) => {
+    if (editingId) {
+      setEmpresas((prev) => 
+        prev.map((e) => 
+          e.id === editingId 
+            ? { ...e, nome: payload.razaoSocial, documento: payload.cnpj } 
+            : e
+        )
+      );
+    } else {
+      const id = `E-${String(Math.floor(Math.random() * 900) + 100)}`;
+      setEmpresas((prev) => [{ id, nome: payload.razaoSocial, documento: payload.cnpj }, ...prev]);
+    }
   };
 
   return (
@@ -189,7 +240,16 @@ function RouteComponent() {
           <div className="p-4">
             {activeTab === "usuarios" && (
               <ul className="divide-y divide-light-border">
-                {filteredUsuarios.map((u) => (
+                {loadingUsuarios && (
+                  <li className="py-3 px-2 text-sm text-font/70">Carregando usuários...</li>
+                )}
+                {errorUsuarios && (
+                  <li className="py-3 px-2 text-sm text-red-400">{errorUsuarios}</li>
+                )}
+                {!loadingUsuarios && !errorUsuarios && filteredUsuarios.length === 0 && (
+                  <li className="py-3 px-2 text-sm text-font/70">Nenhum usuário encontrado.</li>
+                )}
+                {!loadingUsuarios && !errorUsuarios && filteredUsuarios.map((u) => (
                   <li
                     key={u.id}
                     className="py-3 flex items-center justify-between hover:bg-input/40 rounded-lg px-2 cursor-pointer"
@@ -259,7 +319,19 @@ function RouteComponent() {
         }}
         formKind={formKind}
         defaultValues={defaultValues}
-        onSubmit={handleSubmit}
+        onSubmit={async (data: any) => {
+          // Atualiza a lista apropriada baseada no tipo de formulário
+          if (formKind === 'usuario') {
+            await loadUsuarios();
+          } else if (formKind === 'cliente') {
+            updateClientes(data, editingId);
+          } else {
+            updateEmpresas(data, editingId);
+          }
+          // Fecha o modal e limpa o ID de edição
+          setIsModalOpen(false);
+          setEditingId(null);
+        }}
       />
     </div>
   );
