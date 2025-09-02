@@ -3,53 +3,49 @@ import { useForm, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput } from "./text-input";
-import { SelectInput } from "./select-input";
-import type { SelectOption } from "./select-input";
+import { Trash2 } from "lucide-react";
 
-const productSchema = z
-  .object({
-    identificador: z.string().min(1, "Informe o identificador"),
-    name: z.string().min(1, "Informe o nome"),
-    categoria: z.string().min(1, "Selecione uma categoria"),
-    estoqueInicial: z.coerce
-      .number()
-      .refine((n) => !Number.isNaN(n), "Informe um número")
-      .nonnegative("Não pode ser negativo"),
-    limiteAlerta: z.coerce
-      .number()
-      .refine((n) => !Number.isNaN(n), "Informe um número")
-      .nonnegative("Não pode ser negativo"),
-  })
-  .refine((data) => data.limiteAlerta <= data.estoqueInicial, {
-    path: ["limiteAlerta"],
-    message: "Limite deve ser menor ou igual ao estoque",
-  });
+const productSchema = z.object({
+  nome: z.string().min(1, "Informe o nome"),
+  preco: z.coerce
+    .number()
+    .refine((n) => !Number.isNaN(n), "Informe um número válido")
+    .positive("O preço deve ser maior que zero"),
+  estoque: z.coerce
+    .number()
+    .refine((n) => !Number.isNaN(n), "Informe um número válido")
+    .nonnegative("Não pode ser negativo"),
+  ncm: z.string().min(1, "Informe o NCM"),
+  observacao: z.string().optional().or(z.literal("")),
+});
 
 export type ProductFormValues = z.infer<typeof productSchema>;
 
 type ProductFormProps = {
   onSubmit: (data: ProductFormValues) => void | Promise<void>;
   defaultValues?: Partial<ProductFormValues>;
-  categoriaOptions: SelectOption[];
   submitting?: boolean;
+  onDelete?: () => void | Promise<void>;
+  deleting?: boolean;
 };
 
 export function ProductForm({
   onSubmit,
   defaultValues,
-  categoriaOptions,
   submitting,
+  onDelete,
+  deleting,
 }: ProductFormProps) {
   const initValues = useMemo<Partial<ProductFormValues>>(() => {
     const base: Partial<ProductFormValues> = {
-      identificador: defaultValues?.identificador ?? "",
-      name: defaultValues?.name ?? "",
-      categoria: defaultValues?.categoria ?? "",
+      nome: defaultValues?.nome ?? "",
+      ncm: defaultValues?.ncm ?? "",
+      observacao: defaultValues?.observacao ?? "",
     };
-    if (typeof defaultValues?.estoqueInicial === "number")
-      base.estoqueInicial = defaultValues.estoqueInicial;
-    if (typeof defaultValues?.limiteAlerta === "number")
-      base.limiteAlerta = defaultValues.limiteAlerta;
+    if (typeof defaultValues?.preco === "number")
+      base.preco = defaultValues.preco;
+    if (typeof defaultValues?.estoque === "number")
+      base.estoque = defaultValues.estoque;
     return base;
   }, [defaultValues]);
 
@@ -74,62 +70,50 @@ export function ProductForm({
     >
       <div className="grid grid-cols-1 gap-4">
         {(() => {
-          const { ref, onChange, onBlur } = register("identificador");
-          return (
-            <TextInput
-              label="Identificador"
-              name="identificador"
-              placeholder="Ex.: PROD-001"
-              fullWidth
-              ref={ref}
-              onChange={onChange}
-              onBlur={onBlur}
-              error={errors.identificador?.message}
-            />
-          );
-        })()}
-
-        {(() => {
-          const { ref, onChange, onBlur } = register("name");
+          const { ref, onChange, onBlur } = register("nome");
           return (
             <TextInput
               label="Nome"
-              name="name"
+              name="nome"
               placeholder="Ex.: Tintura Arnica 30CH"
               fullWidth
               ref={ref}
               onChange={onChange}
               onBlur={onBlur}
-              error={errors.name?.message as string | undefined}
+              error={errors.nome?.message}
             />
           );
         })()}
 
         {(() => {
-          const { ref, onChange, onBlur } = register("categoria");
-          return (
-            <SelectInput
-              label="Categoria"
-              name="categoria"
-              options={categoriaOptions}
-              placeholder="Selecione..."
-              fullWidth
-              ref={ref}
-              onChange={onChange}
-              onBlur={onBlur}
-              error={errors.categoria?.message}
-            />
-          );
-        })()}
-
-        {(() => {
-          const { ref, onChange, onBlur } = register("estoqueInicial", {
+          const { ref, onChange, onBlur } = register("preco", {
             valueAsNumber: true,
           });
           return (
             <TextInput
-              label="Estoque Inicial"
-              name="estoqueInicial"
+              label="Preço"
+              name="preco"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              placeholder="0.00"
+              fullWidth
+              ref={ref}
+              onChange={onChange}
+              onBlur={onBlur}
+              error={errors.preco?.message}
+            />
+          );
+        })()}
+
+        {(() => {
+          const { ref, onChange, onBlur } = register("estoque", {
+            valueAsNumber: true,
+          });
+          return (
+            <TextInput
+              label="Estoque"
+              name="estoque"
               type="number"
               inputMode="numeric"
               placeholder="0"
@@ -137,39 +121,79 @@ export function ProductForm({
               ref={ref}
               onChange={onChange}
               onBlur={onBlur}
-              error={errors.estoqueInicial?.message}
+              error={errors.estoque?.message}
             />
           );
         })()}
 
         {(() => {
-          const { ref, onChange, onBlur } = register("limiteAlerta", {
-            valueAsNumber: true,
-          });
+          const { ref, onChange, onBlur } = register("ncm");
           return (
             <TextInput
-              label="Limite Alerta"
-              name="limiteAlerta"
-              type="number"
-              inputMode="numeric"
-              placeholder="0"
+              label="NCM"
+              name="ncm"
+              placeholder="Ex.: 3004.90.99"
               fullWidth
               ref={ref}
               onChange={onChange}
               onBlur={onBlur}
-              error={errors.limiteAlerta?.message}
+              error={errors.ncm?.message}
             />
+          );
+        })()}
+
+        {(() => {
+          const { ref, onChange, onBlur } = register("observacao");
+          return (
+            <div className="grid gap-2">
+              <label className="text-sm text-font/80">Observação</label>
+              <textarea
+                {...{ ref, onChange, onBlur }}
+                name="observacao"
+                placeholder="Observações adicionais sobre o produto..."
+                className="min-h-[80px] px-3 py-2 rounded-lg bg-input border border-input-border text-font placeholder:text-font/50 resize-vertical"
+                rows={3}
+              />
+              {errors.observacao && (
+                <span className="text-xs text-red-400">
+                  {errors.observacao.message}
+                </span>
+              )}
+            </div>
           );
         })()}
       </div>
 
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex items-center justify-between gap-3">
+        {/* Delete button - only show when editing */}
+        {defaultValues && onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting || submitting}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500/20 disabled:opacity-60 transition-colors"
+          >
+            {deleting ? (
+              <>
+                <div className="animate-spin h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full" />
+                Excluindo...
+              </>
+            ) : (
+              <>
+                <Trash2 className="size-4" />
+                Excluir
+              </>
+            )}
+          </button>
+        )}
+        
+        {/* Save button */}
         <button
           type="submit"
-          disabled={submitting}
-          className="px-4 py-2 rounded-lg bg-primary text-dark font-bold disabled:opacity-60"
+          disabled={submitting || deleting}
+          className="px-4 py-2 rounded-lg bg-primary text-contrast font-bold disabled:opacity-60 transition-colors"
         >
-          {submitting ? "Salvando..." : "Salvar"}
+          {submitting ? "Salvando..." : defaultValues ? "Salvar" : "Criar"}
         </button>
       </div>
     </form>

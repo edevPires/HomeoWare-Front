@@ -6,7 +6,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "../../lib/api";
 import { toast } from "react-toastify";
-import 'react-toastify/dist/ReactToastify.css';
+import "react-toastify/dist/ReactToastify.css";
 
 type Props = {
   open: boolean;
@@ -94,53 +94,59 @@ export function CadastroModal({
 
     try {
       setIsDeleting(true);
-      console.log('Tentando excluir usuário ID:', defaultValues.id);
-      
+      console.log("Tentando excluir usuário ID:", defaultValues.id);
+
       // Primeiro verifica se o usuário existe
       try {
-        await api.get(`/user/${defaultValues.id}`);
+        await api.get(`/v1/usuarios/${defaultValues.id}`);
       } catch (getError: any) {
-        console.error('Erro ao verificar usuário:', getError);
+        console.error("Erro ao verificar usuário:", getError);
         if (getError.response?.status === 404) {
-          toast.warning('Este usuário já foi removido.');
+          toast.warning("Este usuário já foi removido.");
           onClose();
           return;
         }
         throw getError; // Re-throw para ser pego pelo catch externo
       }
-      
+
       // Se chegou aqui, o usuário existe, então tenta deletar
-      const response = await api.delete(`/user/${defaultValues.id}`);
-      console.log('Resposta da exclusão:', response);
-      
+      const response = await api.delete(`/v1/usuarios/${defaultValues.id}`);
+      console.log("Resposta da exclusão:", response);
+
       toast.success("Usuário excluído com sucesso!");
       onClose();
-      
+
       // Atualiza a lista
       if (onSubmitProp) {
         await onSubmitProp({} as any);
       }
     } catch (error: any) {
       console.error("Erro ao excluir usuário:", error);
-      console.error('Detalhes do erro:', {
+      console.error("Detalhes do erro:", {
         status: error.response?.status,
         data: error.response?.data,
         config: {
           url: error.config?.url,
-          method: error.config?.method
-        }
+          method: error.config?.method,
+        },
       });
-      
+
       if (error.response?.status === 404) {
-        toast.error("Usuário não encontrado. Pode ter sido excluído por outra pessoa.");
+        toast.error(
+          "Usuário não encontrado. Pode ter sido excluído por outra pessoa."
+        );
       } else if (error.response?.status === 403) {
         toast.error("Você não tem permissão para excluir este usuário.");
       } else if (error.response?.status === 500) {
         toast.error("Erro no servidor ao tentar excluir o usuário.");
       } else if (!navigator.onLine) {
-        toast.error("Sem conexão com a internet. Verifique sua conexão e tente novamente.");
+        toast.error(
+          "Sem conexão com a internet. Verifique sua conexão e tente novamente."
+        );
       } else {
-        toast.error(`Erro ao excluir usuário: ${error.message || 'Tente novamente mais tarde.'}`);
+        toast.error(
+          `Erro ao excluir usuário: ${error.message || "Tente novamente mais tarde."}`
+        );
       }
     } finally {
       setIsDeleting(false);
@@ -182,7 +188,7 @@ export function CadastroModal({
         if (isEditing && (defaultValues as any)?.id) {
           // Edição total do usuário
           const userId = String((defaultValues as any).id);
-          await api.put(`/user/${userId}`, payload);
+          await api.put(`/v1/usuarios/${userId}`, payload);
           toast.success("Usuário atualizado com sucesso!");
           onClose();
           // Chamar a função de sucesso para atualizar a lista
@@ -191,7 +197,7 @@ export function CadastroModal({
           }
         } else {
           // Criação de novo usuário
-          await api.post("/user", payload);
+          await api.post("/v1/usuarios", payload);
           toast.success("Usuário criado com sucesso!");
           onClose();
           // Chamar a função de sucesso para atualizar a lista

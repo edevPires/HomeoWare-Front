@@ -41,7 +41,7 @@ function RouteComponent() {
     try {
       setLoadingUsuarios(true);
       setErrorUsuarios(null);
-      const resp = await api.get("/user", { withCredentials: true });
+      const resp = await api.get("/v1/usuarios", { withCredentials: true });
       const payload = resp?.data;
       const items: any[] = Array.isArray(payload)
         ? payload

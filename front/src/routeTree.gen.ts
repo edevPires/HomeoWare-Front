@@ -9,13 +9,20 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RefreshPasswordRouteImport } from './routes/refresh-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HubRouteImport } from './routes/hub'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
 import { Route as HubEstoqueRouteImport } from './routes/hub/estoque'
 import { Route as HubCadastrosRouteImport } from './routes/hub/cadastros'
 
+const RefreshPasswordRoute = RefreshPasswordRouteImport.update({
+  id: '/refresh-password',
+  path: '/refresh-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -24,6 +31,11 @@ const LoginRoute = LoginRouteImport.update({
 const HubRoute = HubRouteImport.update({
   id: '/hub',
   path: '/hub',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -49,15 +61,19 @@ const HubCadastrosRoute = HubCadastrosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/hub': typeof HubRouteWithChildren
   '/login': typeof LoginRoute
+  '/refresh-password': typeof RefreshPasswordRoute
   '/hub/cadastros': typeof HubCadastrosRoute
   '/hub/estoque': typeof HubEstoqueRoute
   '/hub/': typeof HubIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/refresh-password': typeof RefreshPasswordRoute
   '/hub/cadastros': typeof HubCadastrosRoute
   '/hub/estoque': typeof HubEstoqueRoute
   '/hub': typeof HubIndexRoute
@@ -65,8 +81,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/hub': typeof HubRouteWithChildren
   '/login': typeof LoginRoute
+  '/refresh-password': typeof RefreshPasswordRoute
   '/hub/cadastros': typeof HubCadastrosRoute
   '/hub/estoque': typeof HubEstoqueRoute
   '/hub/': typeof HubIndexRoute
@@ -75,18 +93,29 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/forgot-password'
     | '/hub'
     | '/login'
+    | '/refresh-password'
     | '/hub/cadastros'
     | '/hub/estoque'
     | '/hub/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/hub/cadastros' | '/hub/estoque' | '/hub'
+  to:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/refresh-password'
+    | '/hub/cadastros'
+    | '/hub/estoque'
+    | '/hub'
   id:
     | '__root__'
     | '/'
+    | '/forgot-password'
     | '/hub'
     | '/login'
+    | '/refresh-password'
     | '/hub/cadastros'
     | '/hub/estoque'
     | '/hub/'
@@ -94,12 +123,21 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   HubRoute: typeof HubRouteWithChildren
   LoginRoute: typeof LoginRoute
+  RefreshPasswordRoute: typeof RefreshPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/refresh-password': {
+      id: '/refresh-password'
+      path: '/refresh-password'
+      fullPath: '/refresh-password'
+      preLoaderRoute: typeof RefreshPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -112,6 +150,13 @@ declare module '@tanstack/react-router' {
       path: '/hub'
       fullPath: '/hub'
       preLoaderRoute: typeof HubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -161,8 +206,10 @@ const HubRouteWithChildren = HubRoute._addFileChildren(HubRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   HubRoute: HubRouteWithChildren,
   LoginRoute: LoginRoute,
+  RefreshPasswordRoute: RefreshPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

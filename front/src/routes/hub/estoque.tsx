@@ -1,15 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { LayoutTitle } from "../../components/layouts/layout-title";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, Loader2 } from "lucide-react";
 import { ProductCard } from "../../components/ui/product-card";
 import { Modal } from "../../components/layouts/modal";
 import {
   ProductForm,
   type ProductFormValues,
 } from "../../components/form/product-form";
-import type { SelectOption } from "../../components/form/select-input";
-import axios from "axios";
+import { api } from "../../lib/api";
 
 export const Route = createFileRoute("/hub/estoque")({
   component: RouteComponent,
@@ -17,13 +16,12 @@ export const Route = createFileRoute("/hub/estoque")({
 
 type Produto = {
   id: string;
-  name: string;
-  quantity: number;
+  nome: string;
+  preco: number;
+  estoque: number;
+  ncm: string;
+  observacao?: string;
   createdAt: number;
-  // Optional extra fields that might be present later
-  categoria?: string;
-  estoqueInicial?: number;
-  limiteAlerta?: number;
 };
 
 // const initialProdutos: Produto[] = [
@@ -70,22 +68,16 @@ function RouteComponent() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  const categoriaOptions: SelectOption[] = [
-    { value: "homeopatia", label: "Homeopatia" },
-    { value: "fitoterapia", label: "Fitoterapia" },
-    { value: "dermocosmetico", label: "Dermocosmético" },
-  ];
+  const [deleting, setDeleting] = useState(false);
 
   const mapApiProduto = (r: any): Produto => ({
-    id: r?.identificador ?? r?.id,
-    name: r?.name ?? "",
-    quantity:
-      typeof r?.quantity === "number" ? r.quantity : (r?.estoqueInicial ?? 0),
+    id: r?.id ?? "",
+    nome: r?.nome ?? "",
+    preco: typeof r?.preco === "number" ? r.preco : 0,
+    estoque: typeof r?.estoque === "number" ? r.estoque : 0,
+    ncm: r?.ncm ?? "",
+    observacao: r?.observacao ?? "",
     createdAt: typeof r?.createdAt === "number" ? r.createdAt : Date.now(),
-    categoria: r?.categoria,
-    estoqueInicial: r?.estoqueInicial,
-    limiteAlerta: r?.limiteAlerta,
   });
 
   // Fetch products on mount
@@ -94,10 +86,9 @@ function RouteComponent() {
     (async () => {
       try {
         setLoading(true);
-        const res = await axios.get("/api/produtos");
-        const data = Array.isArray(res.data)
-          ? res.data
-          : (res.data?.items ?? []);
+        const res = await api.get("/v1/produtos");
+        // Backend returns paginated data: { data: [...], current_page, last_page, etc }
+        const data = res.data?.data ?? [];
         if (!active) return;
         setProdutos((data as any[]).map(mapApiProduto));
       } catch (err) {
@@ -115,7 +106,10 @@ function RouteComponent() {
     const q = query.trim().toLowerCase();
     if (!q) return produtos;
     return produtos.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+      (p) =>
+        p.nome.toLowerCase().includes(q) ||
+        String(p.id).toLowerCase().includes(q) ||
+        p.ncm.toLowerCase().includes(q)
     );
   }, [query, produtos]);
 
@@ -123,9 +117,9 @@ function RouteComponent() {
     const arr = [...filtered];
     switch (sort) {
       case "qty-asc":
-        return arr.sort((a, b) => a.quantity - b.quantity);
+        return arr.sort((a, b) => a.estoque - b.estoque);
       case "qty-desc":
-        return arr.sort((a, b) => b.quantity - a.quantity);
+        return arr.sort((a, b) => b.estoque - a.estoque);
       case "date-asc":
         return arr.sort((a, b) => a.createdAt - b.createdAt);
       case "date-desc":
@@ -151,16 +145,16 @@ function RouteComponent() {
     setEditingId(null);
   };
 
-  const defaultValues: Partial<ProductFormValues> | undefined = useMemo(() => {
+  const defaultValues = useMemo(() => {
     if (!editingId) return undefined;
     const p = produtos.find((x) => x.id === editingId);
     if (!p) return undefined;
     return {
-      identificador: p.id,
-      name: p.name,
-      categoria: p.categoria ?? "",
-      estoqueInicial: p.estoqueInicial ?? p.quantity,
-      limiteAlerta: p.limiteAlerta ?? 0,
+      nome: p.nome,
+      preco: p.preco,
+      estoque: p.estoque,
+      ncm: p.ncm,
+      observacao: p.observacao,
     };
   }, [editingId, produtos]);
 
@@ -168,33 +162,100 @@ function RouteComponent() {
     setSubmitting(true);
     try {
       const payload = {
-        identificador: data.identificador,
-        name: data.name,
-        categoria: data.categoria,
-        estoqueInicial: data.estoqueInicial,
-        limiteAlerta: data.limiteAlerta,
+        nome: data.nome,
+        preco: data.preco,
+        estoque: data.estoque,
+        ncm: data.ncm,
+        observacao: data.observacao,
       };
 
       if (editingId) {
         // Update existing product via API
-        const res = await axios.put(
-          `/api/produtos/editar/${encodeURIComponent(editingId)}`,
+        const res = await api.put(
+          `/v1/produtos/${editingId}`,
           payload
         );
-        const updated = mapApiProduto(res.data);
-        setProdutos((prev) =>
-          prev.map((p) => (p.id === editingId ? updated : p))
-        );
+        const apiResponse = res.data?.data ?? res.data;
+        
+        // Check if API returned a different ID (indicates backend issue)
+        if (apiResponse.id && String(apiResponse.id) !== String(editingId)) {
+          console.warn('⚠️ API returned different ID!', {
+            expected: editingId,
+            received: apiResponse.id,
+            message: 'This suggests the backend created a new product instead of updating the existing one'
+          });
+        }
+        
+        // Always use the original editing ID to maintain consistency
+        const updated = {
+          ...mapApiProduto(apiResponse),
+          id: editingId // Force the ID to match what we're editing
+        };
+        
+        setProdutos((prev) => {
+          const newProducts = prev.map((p) => {
+            if (String(p.id) === String(editingId)) {
+              console.log('✅ Successfully updated product:', editingId);
+              return updated;
+            }
+            return p;
+          });
+          
+          return newProducts;
+        });
       } else {
         // Create new product via API
-        const res = await axios.post("/api/produtos/criar", payload);
-        const created = mapApiProduto(res.data);
+        const res = await api.post("/v1/produtos", payload);
+        const created = mapApiProduto(res.data?.data ?? res.data);
         setProdutos((prev) => [created, ...prev]);
       }
       setModalOpen(false);
       setEditingId(null);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!editingId) return;
+    
+    const produto = produtos.find(p => p.id === editingId);
+    if (!produto) return;
+
+    if (!confirm(`Tem certeza que deseja excluir o produto "${produto.nome}"?`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await api.delete(`/v1/produtos/${editingId}`);
+      
+      // Log success message from API (should be "Produto removido com sucesso.")
+      if (response.data?.message) {
+        console.log('✅ Delete success:', response.data.message);
+      }
+      
+      // Remove product from local state
+      setProdutos((prev) => prev.filter((p) => p.id !== editingId));
+      setModalOpen(false);
+      setEditingId(null);
+      
+      // Optional: Show success message to user
+      // alert(response.data?.message || 'Produto removido com sucesso!');
+      
+    } catch (error: any) {
+      console.error('Erro ao excluir produto:', error);
+      
+      // Handle specific API error responses
+      if (error.response?.status === 404) {
+        alert('Produto não encontrado.');
+      } else if (error.response?.status === 401) {
+        alert('Não autorizado. Faça login novamente.');
+      } else {
+        alert('Erro ao excluir produto. Tente novamente.');
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -207,7 +268,10 @@ function RouteComponent() {
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-md w-full">
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-font/60" size={18} />
+            <SearchIcon
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-font/60"
+              size={18}
+            />
             <input
               type="text"
               placeholder="Buscar por nome ou ID..."
@@ -218,7 +282,9 @@ function RouteComponent() {
           </div>
         </div>
         <div>
-          <label htmlFor="filtro" className="sr-only">Ordenar</label>
+          <label htmlFor="filtro" className="sr-only">
+            Ordenar
+          </label>
           <select
             name="filtro"
             id="filtro"
@@ -235,36 +301,55 @@ function RouteComponent() {
       </div>
 
       {loading && (
-        <div className="mb-4 text-sm text-font/70">Carregando produtos...</div>
+        <div className="mt-4 flex flex-col items-center justify-center py-12 text-font/70">
+          <Loader2 className="size-8 animate-spin text-primary mb-3" />
+          <span className="text-sm">Carregando produtos...</span>
+        </div>
       )}
 
-      <div className="mt-4 border border-light-border rounded-2xl bg-light">
-        <div className="p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-            <button
-              type="button"
-              onClick={openCreate}
-              className="flex flex-col justify-center items-center border border-input-border rounded-2xl p-4 h-36 text-primary hover:border-primary/70 hover:shadow-[0_0_0_1px_var(--color-primary)] transition-colors"
-            >
-              <PlusIcon size={24} />
-              <span className="mt-1 text-sm font-medium">Adicionar produto</span>
-              <span className="text-xs text-font/70">Cadastrar um novo item no estoque</span>
-            </button>
-            {sorted.map((produto) => (
-              <ProductCard
-                key={produto.id}
-                id={produto.id}
-                name={produto.name}
-                quantity={produto.quantity}
-                categoria={produto.categoria}
-                estoqueInicial={produto.estoqueInicial}
-                limiteAlerta={produto.limiteAlerta}
-                onClick={() => openEdit(produto.id)}
-              />
-            ))}
+      {/* Add Product Button */}
+      <div className="mt-4 flex justify-start">
+        <button
+          type="button"
+          onClick={openCreate}
+          className="inline-flex items-center gap-2 px-4 py-2  bg-primary text-contrast rounded-lg font-medium hover:brightness-110 transition-all"
+        >
+          <PlusIcon size={16} className="text-dark" />
+          <span className="text-dark">Adicionar produto</span>
+        </button>
+      </div>
+
+      {/* Products Grid */}
+      {!loading && (
+        <div className="mt-3 border border-light-border rounded-2xl bg-light">
+          <div className="p-4">
+            {sorted.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-font/60">
+                <div className="text-4xl mb-4">📦</div>
+                <h3 className="text-lg font-medium text-font/80 mb-2">Nenhum produto encontrado</h3>
+                <p className="text-sm text-center max-w-md">
+                  {query ? 'Tente ajustar sua pesquisa ou' : 'Comece'} adicionando seu primeiro produto ao estoque.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                {sorted.map((produto) => (
+                  <ProductCard
+                    key={produto.id}
+                    id={produto.id}
+                    nome={produto.nome}
+                    preco={produto.preco}
+                    estoque={produto.estoque}
+                    ncm={produto.ncm}
+                    observacao={produto.observacao}
+                    onClick={() => openEdit(produto.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       <Modal
         open={isModalOpen}
@@ -275,8 +360,9 @@ function RouteComponent() {
         <ProductForm
           onSubmit={handleSubmitForm}
           defaultValues={defaultValues}
-          categoriaOptions={categoriaOptions}
           submitting={submitting}
+          onDelete={editingId ? handleDeleteProduct : undefined}
+          deleting={deleting}
         />
       </Modal>
     </div>

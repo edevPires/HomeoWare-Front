@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import FullscreenLayout from "../components/layouts/fullscreen-layout";
 import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
@@ -161,6 +161,15 @@ function RouteComponent() {
           >
             {isSubmitting ? "Entrando..." : "Entrar"}
           </button>
+        </div>
+
+        <div className="text-center">
+          <Link
+            to="/forgot-password"
+            className="text-sm text-primary hover:text-primary/80 font-medium"
+          >
+            Esqueceu a senha?
+          </Link>
         </div>
       </form>
     </FullscreenLayout>
