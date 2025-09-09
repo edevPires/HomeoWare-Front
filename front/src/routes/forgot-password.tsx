@@ -33,11 +33,11 @@ function RouteComponent() {
   });
 
   const onSubmit: SubmitHandler<ForgotPasswordFormValues> = async (data) => {
-    // API: POST /forgot-password
+    // API: POST /api/mandaEmail/redefinicaoSenha
     // Body esperado: { email: string }
     // Sucesso 200: { message: "Link de redefinição enviado para seu e-mail." }
     try {
-      await api.post("/forgot-password", {
+      await api.post("/mandaEmail/redefinicaoSenha", {
         email: data.email,
       });
 
@@ -52,7 +52,9 @@ function RouteComponent() {
       }
       if (status === 422) {
         const errors = err?.response?.data?.errors;
-        const msg = err?.response?.data?.message || "Erro de validação nos dados enviados.";
+        const msg =
+          err?.response?.data?.message ||
+          "Erro de validação nos dados enviados.";
         if (errors) {
           const details = Object.values(errors).flat().join("\n");
           alert(`${msg}\n${details}`);
@@ -61,7 +63,9 @@ function RouteComponent() {
         }
         return;
       }
-      const msg = err?.response?.data?.message || "Não foi possível enviar o link de redefinição.";
+      const msg =
+        err?.response?.data?.message ||
+        "Não foi possível enviar o link de redefinição.";
       alert(msg);
     }
   };
@@ -94,7 +98,10 @@ function RouteComponent() {
           </div>
 
           <div className="text-center text-sm text-font/70 space-y-2">
-            <p>Verifique sua caixa de entrada e clique no link para redefinir sua senha.</p>
+            <p>
+              Verifique sua caixa de entrada e clique no link para redefinir sua
+              senha.
+            </p>
             <p>O link expira em 60 minutos.</p>
           </div>
 
@@ -159,7 +166,7 @@ function RouteComponent() {
           >
             {isSubmitting ? "Enviando..." : "Enviar Link de Redefinição"}
           </button>
-          
+
           <button
             type="button"
             onClick={handleBackToLogin}

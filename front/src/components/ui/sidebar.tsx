@@ -7,7 +7,7 @@ export default function Sidebar() {
   return (
     <aside
       aria-label="Navegação principal"
-      className="fixed top-0 left-0 w-20 h-dvh border-r border-light-border bg-light"
+      className="fixed top-0 left-0 w-15 sm:20 h-dvh border-r border-light-border bg-light"
     >
       <div className="h-full flex flex-col items-center py-6">
         {/* Logo */}

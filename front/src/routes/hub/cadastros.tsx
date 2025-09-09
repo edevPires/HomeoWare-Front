@@ -191,7 +191,7 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex flex-col p-6 text-font">
+    <div className="flex flex-col p-6 text-font overflow-y-auto">
       <LayoutTitle title="Central de" subtitle="Cadastros" />
 
       {/* Ações principais */}
@@ -210,7 +210,7 @@ function RouteComponent() {
                 type="button"
                 onClick={() => setActiveTab(t.key)}
                 className={[
-                  "h-9 px-4 rounded-lg text-sm transition-colors",
+                  "h-9 px-2 rounded-lg text-sm transition-colors",
                   active
                     ? "bg-input border border-input-border text-primary font-semibold"
                     : "text-font/80 hover:text-primary",

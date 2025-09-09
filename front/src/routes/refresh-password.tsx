@@ -78,15 +78,14 @@ function RouteComponent() {
   });
 
   const onSubmit: SubmitHandler<RefreshPasswordFormValues> = async (data) => {
-    // API: POST /reset-password
-    // Body esperado: { token: string, email: string, password: string, password_confirmation: string }
+    // API: POST /api/redefinicaoSenha
+    // Body esperado: { email: string, token: string, password: string }
     // Sucesso 200: { message: "Senha redefinida com sucesso." }
     try {
       await api.post("/redefinicaoSenha", {
-        token,
         email,
+        token,
         password: data.password,
-        password_confirmation: data.password_confirmation,
       });
 
       // Mostra tela de sucesso
