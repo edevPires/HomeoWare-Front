@@ -18,6 +18,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
+      // Handle 401 unauthorized errors - redirect to login
+      if (error.response.status === 401) {
+        // Clear authentication data
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("auth_token_type");
+        localStorage.removeItem("auth_user");
+        
+        // Redirect to login page
+        window.location.href = "/login";
+        return Promise.reject(error);
+      }
+      
       // Handle 404 errors specifically
       if (error.response.status === 404) {
         console.error('Resource not found:', {
